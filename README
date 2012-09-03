@@ -1,0 +1,20 @@
+This fork is an attempt to add persistence to AudioStreamer and make
+AudioStreamer more suitable for streaming music of finite length.
+Files  are downloaded to, and streamed from, the disk.
+Persistence allows for seeking within the downloaded part of the file
+without having to download the data all over again. 
+
+Instead of a CFStream, AudioStreamer relies on JBSongFetcher 
+to provide song data. 
+
+JBSongFetcher mimics a stream (although it carriers much less state than a stream). 
+It works in tandem with JBDownload. 
+JBDownload streams data from the network to a file. JBSongFetcher reads the data
+and passes it to AudioStreamer through NSStream like callbacks.
+All reads and writes happen on a worker queue, so your threads do not
+get bogged down with disk IO.
+
+
+
+
+
