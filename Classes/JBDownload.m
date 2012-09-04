@@ -331,7 +331,7 @@ void JBReadStreamCallBack
             dispatch_async(_writeQueue, ^{
                 
                 // Checking error state is not thread safe (eg could be in failWithError method when this block runs)
-                // But that's OK, this check is here to prevent SOME number of reads after an error, but not necessarily ALL reads after an error
+                // But that's OK, this check is here to prevent SOME number of reads after an error, not necessarily ALL reads after an error
                 //
                 if(self.state == JBDownload_State_ERROR) return;
                 

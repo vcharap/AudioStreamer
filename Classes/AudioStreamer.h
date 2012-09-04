@@ -29,6 +29,7 @@
 
 #include <pthread.h>
 #include <AudioToolbox/AudioToolbox.h>
+#import "JBSongFetcher.h"
 
 #define LOG_QUEUED_BUFFERS 0
 
@@ -83,6 +84,7 @@ typedef enum
 {
 	AS_NO_ERROR = 0,
 	AS_NETWORK_CONNECTION_FAILED,
+    AS_SONG_FETCHER_ERROR,
 	AS_FILE_STREAM_GET_PROPERTY_FAILED,
 	AS_FILE_STREAM_SEEK_FAILED,
 	AS_FILE_STREAM_PARSE_BYTES_FAILED,
@@ -107,7 +109,7 @@ typedef enum
 
 extern NSString * const ASStatusChangedNotification;
 
-@interface AudioStreamer : NSObject
+@interface AudioStreamer : NSObject <JBSongFetcherDelegate>
 {
 	NSURL *url;
 
@@ -143,7 +145,7 @@ extern NSString * const ASStatusChangedNotification;
 	pthread_mutex_t queueBuffersMutex;			// a mutex to protect the inuse flags
 	pthread_cond_t queueBufferReadyCondition;	// a condition varable for handling the inuse flags
 
-	CFReadStreamRef stream;
+    JBSongFetcher *songFetcher;
 	NSNotificationCenter *notificationCenter;
 	
 	UInt32 bitRate;				// Bits per second in the file

@@ -13,8 +13,8 @@
 		1DF5F4E00D08C38300B7A737 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1DF5F4DF0D08C38300B7A737 /* UIKit.framework */; };
 		288765A50DF7441C002DB57D /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 288765A40DF7441C002DB57D /* CoreGraphics.framework */; };
 		28D7ACF80DDB3853001CB0EB /* iPhoneStreamingPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 28D7ACF70DDB3853001CB0EB /* iPhoneStreamingPlayerViewController.m */; };
-		56003EEA15F4929C0012B96C /* JBDownload.m in Sources */ = {isa = PBXBuildFile; fileRef = 56003EE315F4929B0012B96C /* JBDownload.m */; };
-		56003EEB15F4929C0012B96C /* JBSongFetcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 56003EE515F4929B0012B96C /* JBSongFetcher.m */; };
+		56003EEA15F4929C0012B96C /* JBDownload.m in Sources */ = {isa = PBXBuildFile; fileRef = 56003EE315F4929B0012B96C /* JBDownload.m */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		56003EEB15F4929C0012B96C /* JBSongFetcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 56003EE515F4929B0012B96C /* JBSongFetcher.m */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		56003EEC15F4929C0012B96C /* NSArray+NSArray_FirstObject.m in Sources */ = {isa = PBXBuildFile; fileRef = 56003EE715F4929B0012B96C /* NSArray+NSArray_FirstObject.m */; };
 		56003EED15F4929C0012B96C /* NSString+NSString_MD5.m in Sources */ = {isa = PBXBuildFile; fileRef = 56003EE915F4929C0012B96C /* NSString+NSString_MD5.m */; };
 		C90A804C14134C9400810E93 /* MainWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = C9E673010FE8C55B0033BF43 /* MainWindow.xib */; };

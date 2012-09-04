@@ -41,8 +41,20 @@ static NSString* const JBSongFetcherReadExceptionKey = @"JBSongFetcherExceptionK
 @implementation JBSongFetcher
 
 
-@synthesize fileLength = _fileLength, bytesAvailable = _bytesAvailable, state = _state, error = _error;
+@synthesize fileLength = _fileLength, bytesAvailable, state = _state, error = _error;
 @synthesize libraryDirPath = _libraryDirPath, filePath = _filePath, consumer = _consumer;
+
+-(NSInteger)bytesAvailable
+{
+    NSError *err = nil;
+    NSDictionary* attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:self.filePath error:&err];
+    
+    NSInteger fileSize = -1;
+    if(!err){
+        fileSize = (NSInteger)[attrs fileSize];
+    }
+    return fileSize;
+}
 
 -(NSString*)libraryDirPath
 {
@@ -125,7 +137,7 @@ static NSString* const JBSongFetcherReadExceptionKey = @"JBSongFetcherExceptionK
 }
 
 // Function pauses the handing over of data to delegate, but does not stop the download of data.
-// Function has no effect if not in FETCHING or FLUSHING states. 
+// 
 //
 -(void)pause
 {
@@ -282,11 +294,9 @@ static NSString* const JBSongFetcherReadExceptionKey = @"JBSongFetcherExceptionK
 //
 -(unsigned long long)fetchByteForRequested:(unsigned long long)byte
 {
-    NSError *err = nil;
-    NSDictionary* attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:self.filePath error:&err];
-    unsigned long long fileSize = [attrs fileSize];
+    NSInteger fileSize = self.bytesAvailable;
     
-    if(byte > fileSize){
+    if(fileSize >= 0 && byte > fileSize){
         byte = fileSize;
     }
     return byte;

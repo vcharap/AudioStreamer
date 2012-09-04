@@ -54,6 +54,8 @@ NSString * const AS_AUDIO_STREAMER_FAILED_STRING = @"Audio playback failed";
 NSString * const AS_NETWORK_CONNECTION_FAILED_STRING = @"Network connection failed";
 NSString * const AS_AUDIO_BUFFER_TOO_SMALL_STRING = @"Audio packets are larger than kAQDefaultBufSize.";
 
+NSString* const AS_SONG_FETCHER_ERROR_STRING = @"Song fetcher error.";
+
 @interface AudioStreamer ()
 @property (readwrite) AudioStreamerState state;
 
@@ -75,8 +77,6 @@ NSString * const AS_AUDIO_BUFFER_TOO_SMALL_STRING = @"Audio packets are larger t
 
 - (void)internalSeekToTime:(double)newSeekTime;
 - (void)enqueueBuffer;
-- (void)handleReadFromStream:(CFReadStreamRef)aStream
-	eventType:(CFStreamEventType)eventType;
 
 @end
 
@@ -178,25 +178,6 @@ static void ASAudioSessionInterruptionListener(void *inClientData, UInt32 inInte
 #endif
 
 #pragma mark CFReadStream Callback Function Implementations
-
-//
-// ReadStreamCallBack
-//
-// This is the callback for the CFReadStream from the network connection. This
-// is where all network data is passed to the AudioFileStream.
-//
-// Invoked when an error occurs, the stream ends or we have data to read.
-//
-static void ASReadStreamCallBack
-(
-   CFReadStreamRef aStream,
-   CFStreamEventType eventType,
-   void* inClientInfo
-)
-{
-	AudioStreamer* streamer = (AudioStreamer *)inClientInfo;
-	[streamer handleReadFromStream:aStream eventType:eventType];
-}
 
 @implementation AudioStreamer
 
@@ -333,6 +314,8 @@ static void ASReadStreamCallBack
 			return AS_AUDIO_STREAMER_FAILED_STRING;
 		case AS_AUDIO_BUFFER_TOO_SMALL:
 			return AS_AUDIO_BUFFER_TOO_SMALL_STRING;
+        case AS_SONG_FETCHER_ERROR:
+            return AS_SONG_FETCHER_ERROR_STRING;
 		default:
 			return AS_AUDIO_STREAMER_FAILED_STRING;
 	}
@@ -607,110 +590,7 @@ static void ASReadStreamCallBack
 	return fileTypeHint;
 }
 
-//
-// openReadStream
-//
-// Open the audioFileStream to parse data and the fileHandle as the data
-// source.
-//
-- (BOOL)openReadStream
-{
-	@synchronized(self)
-	{
-		NSAssert([[NSThread currentThread] isEqual:internalThread],
-			@"File stream download must be started on the internalThread");
-		NSAssert(stream == nil, @"Download stream already initialized");
-		
-		//
-		// Create the HTTP GET request
-		//
-		CFHTTPMessageRef message= CFHTTPMessageCreateRequest(NULL, (CFStringRef)@"GET", (CFURLRef)url, kCFHTTPVersion1_1);
-		
-		//
-		// If we are creating this request to seek to a location, set the
-		// requested byte range in the headers.
-		//
-		if (fileLength > 0 && seekByteOffset > 0)
-		{
-			CFHTTPMessageSetHeaderFieldValue(message, CFSTR("Range"),
-				(CFStringRef)[NSString stringWithFormat:@"bytes=%ld-%ld", seekByteOffset, fileLength]);
-			discontinuous = YES;
-		}
-		
-		//
-		// Create the read stream that will receive data from the HTTP request
-		//
-		stream = CFReadStreamCreateForHTTPRequest(NULL, message);
-		CFRelease(message);
-		
-		//
-		// Enable stream redirection
-		//
-		if (CFReadStreamSetProperty(
-			stream,
-			kCFStreamPropertyHTTPShouldAutoredirect,
-			kCFBooleanTrue) == false)
-		{
-			[self presentAlertWithTitle:NSLocalizedStringFromTable(@"File Error", @"Errors", nil)
-								message:NSLocalizedStringFromTable(@"Unable to configure network read stream.", @"Errors", nil)];
-			return NO;
-		}
-		
-		//
-		// Handle proxies
-		//
-		CFDictionaryRef proxySettings = CFNetworkCopySystemProxySettings();
-		CFReadStreamSetProperty(stream, kCFStreamPropertyHTTPProxy, proxySettings);
-		CFRelease(proxySettings);
-		
-		//
-		// Handle SSL connections
-		//
-		if( [[url absoluteString] rangeOfString:@"https"].location != NSNotFound )
-		{
-			NSDictionary *sslSettings =
-				[NSDictionary dictionaryWithObjectsAndKeys:
-					(NSString *)kCFStreamSocketSecurityLevelNegotiatedSSL, kCFStreamSSLLevel,
-					[NSNumber numberWithBool:YES], kCFStreamSSLAllowsExpiredCertificates,
-					[NSNumber numberWithBool:YES], kCFStreamSSLAllowsExpiredRoots,
-					[NSNumber numberWithBool:YES], kCFStreamSSLAllowsAnyRoot,
-					[NSNumber numberWithBool:NO], kCFStreamSSLValidatesCertificateChain,
-					[NSNull null], kCFStreamSSLPeerName,
-				nil];
 
-			CFReadStreamSetProperty(stream, kCFStreamPropertySSLSettings, sslSettings);
-		}
-		
-		//
-		// We're now ready to receive data
-		//
-		self.state = AS_WAITING_FOR_DATA;
-
-		//
-		// Open the stream
-		//
-		if (!CFReadStreamOpen(stream))
-		{
-			CFRelease(stream);
-			[self presentAlertWithTitle:NSLocalizedStringFromTable(@"File Error", @"Errors", nil)
-								message:NSLocalizedStringFromTable(@"Unable to configure network read stream.", @"Errors", nil)];
-			return NO;
-		}
-		
-		//
-		// Set our callback function to receive the data
-		//
-		CFStreamClientContext context = {0, self, NULL, NULL, NULL};
-		CFReadStreamSetClient(
-			stream,
-			kCFStreamEventHasBytesAvailable | kCFStreamEventErrorOccurred | kCFStreamEventEndEncountered,
-			ASReadStreamCallBack,
-			&context);
-		CFReadStreamScheduleWithRunLoop(stream, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
-	}
-	
-	return YES;
-}
 
 //
 // startInternal
@@ -779,7 +659,7 @@ static void ASReadStreamCallBack
 		pthread_mutex_init(&queueBuffersMutex, NULL);
 		pthread_cond_init(&queueBufferReadyCondition, NULL);
 		
-		if (![self openReadStream])
+		if (! (songFetcher = [[JBSongFetcher alloc] initWithURL:url andDelegate:self]))
 		{
 			goto cleanup;
 		}
@@ -789,6 +669,7 @@ static void ASReadStreamCallBack
 	// Process the run loop until playback is finished or failed.
 	//
 	BOOL isRunning = YES;
+    [songFetcher fetchData];
 	do
 	{
 		isRunning = [[NSRunLoop currentRunLoop]
@@ -823,18 +704,13 @@ cleanup:
 
 	@synchronized(self)
 	{
+        [songFetcher stop];
+		[songFetcher release];
+        songFetcher = nil;
+        
+        
 		//
-		// Cleanup the read stream if it is still open
-		//
-		if (stream)
-		{
-			CFReadStreamClose(stream);
-			CFRelease(stream);
-			stream = nil;
-		}
-		
-		//
-		// Close the audio file strea,
+		// Close the audio file stream,
 		//
 		if (audioFileStream)
 		{
@@ -964,16 +840,6 @@ cleanup:
 	}
 
 	//
-	// Close the current read straem
-	//
-	if (stream)
-	{
-		CFReadStreamClose(stream);
-		CFRelease(stream);
-		stream = nil;
-	}
-
-	//
 	// Stop the audio queue
 	//
 	self.state = AS_STOPPING;
@@ -985,11 +851,7 @@ cleanup:
 		return;
 	}
 
-	//
-	// Re-open the file stream. It will request a byte-range starting at
-	// seekByteOffset.
-	//
-	[self openReadStream];
+	[songFetcher fetchDataFromByte:seekByteOffset];
 }
 
 //
@@ -1170,191 +1032,6 @@ cleanup:
 	}
 }
 
-//
-// handleReadFromStream:eventType:
-//
-// Reads data from the network file stream into the AudioFileStream
-//
-// Parameters:
-//    aStream - the network file stream
-//    eventType - the event which triggered this method
-//
-- (void)handleReadFromStream:(CFReadStreamRef)aStream
-	eventType:(CFStreamEventType)eventType
-{
-	if (aStream != stream)
-	{
-		//
-		// Ignore messages from old streams
-		//
-		return;
-	}
-	
-	if (eventType == kCFStreamEventErrorOccurred)
-	{
-		[self failWithErrorCode:AS_AUDIO_DATA_NOT_FOUND];
-	}
-	else if (eventType == kCFStreamEventEndEncountered)
-	{
-		@synchronized(self)
-		{
-			if ([self isFinishing])
-			{
-				return;
-			}
-		}
-		
-		//
-		// If there is a partially filled buffer, pass it to the AudioQueue for
-		// processing
-		//
-		if (bytesFilled)
-		{
-			if (self.state == AS_WAITING_FOR_DATA)
-			{
-				//
-				// Force audio data smaller than one whole buffer to play.
-				//
-				self.state = AS_FLUSHING_EOF;
-			}
-			[self enqueueBuffer];
-		}
-
-		@synchronized(self)
-		{
-			if (state == AS_WAITING_FOR_DATA)
-			{
-				[self failWithErrorCode:AS_AUDIO_DATA_NOT_FOUND];
-			}
-			
-			//
-			// We left the synchronized section to enqueue the buffer so we
-			// must check that we are !finished again before touching the
-			// audioQueue
-			//
-			else if (![self isFinishing])
-			{
-				if (audioQueue)
-				{
-					//
-					// Set the progress at the end of the stream
-					//
-					err = AudioQueueFlush(audioQueue);
-					if (err)
-					{
-						[self failWithErrorCode:AS_AUDIO_QUEUE_FLUSH_FAILED];
-						return;
-					}
-
-					self.state = AS_STOPPING;
-					stopReason = AS_STOPPING_EOF;
-					err = AudioQueueStop(audioQueue, false);
-					if (err)
-					{
-						[self failWithErrorCode:AS_AUDIO_QUEUE_FLUSH_FAILED];
-						return;
-					}
-				}
-				else
-				{
-					self.state = AS_STOPPED;
-					stopReason = AS_STOPPING_EOF;
-				}
-			}
-		}
-	}
-	else if (eventType == kCFStreamEventHasBytesAvailable)
-	{
-		if (!httpHeaders)
-		{
-			CFTypeRef message =
-				CFReadStreamCopyProperty(stream, kCFStreamPropertyHTTPResponseHeader);
-			httpHeaders =
-				(NSDictionary *)CFHTTPMessageCopyAllHeaderFields((CFHTTPMessageRef)message);
-			CFRelease(message);
-			
-			//
-			// Only read the content length if we seeked to time zero, otherwise
-			// we only have a subset of the total bytes.
-			//
-			if (seekByteOffset == 0)
-			{
-				fileLength = [[httpHeaders objectForKey:@"Content-Length"] integerValue];
-			}
-		}
-
-		if (!audioFileStream)
-		{
-			//
-			// Attempt to guess the file type from the URL. Reading the MIME type
-			// from the httpHeaders might be a better approach since lots of
-			// URL's don't have the right extension.
-			//
-			// If you have a fixed file-type, you may want to hardcode this.
-			//
-			if (!self.fileExtension)
-			{
-				self.fileExtension = [[url path] pathExtension];
-			}
-			AudioFileTypeID fileTypeHint =
-				[AudioStreamer hintForFileExtension:self.fileExtension];
-
-			// create an audio file stream parser
-			err = AudioFileStreamOpen(self, ASPropertyListenerProc, ASPacketsProc, 
-									fileTypeHint, &audioFileStream);
-			if (err)
-			{
-				[self failWithErrorCode:AS_FILE_STREAM_OPEN_FAILED];
-				return;
-			}
-		}
-		
-		UInt8 bytes[kAQDefaultBufSize];
-		CFIndex length;
-		@synchronized(self)
-		{
-			if ([self isFinishing] || !CFReadStreamHasBytesAvailable(stream))
-			{
-				return;
-			}
-			
-			//
-			// Read the bytes from the stream
-			//
-			length = CFReadStreamRead(stream, bytes, kAQDefaultBufSize);
-			
-			if (length == -1)
-			{
-				[self failWithErrorCode:AS_AUDIO_DATA_NOT_FOUND];
-				return;
-			}
-			
-			if (length == 0)
-			{
-				return;
-			}
-		}
-
-		if (discontinuous)
-		{
-			err = AudioFileStreamParseBytes(audioFileStream, length, bytes, kAudioFileStreamParseFlag_Discontinuity);
-			if (err)
-			{
-				[self failWithErrorCode:AS_FILE_STREAM_PARSE_BYTES_FAILED];
-				return;
-			}
-		}
-		else
-		{
-			err = AudioFileStreamParseBytes(audioFileStream, length, bytes, 0);
-			if (err)
-			{
-				[self failWithErrorCode:AS_FILE_STREAM_PARSE_BYTES_FAILED];
-				return;
-			}
-		}
-	}
-}
 
 //
 // enqueueBuffer
@@ -1371,7 +1048,7 @@ cleanup:
 {
 	@synchronized(self)
 	{
-		if ([self isFinishing] || stream == 0)
+		if ([self isFinishing])
 		{
 			return;
 		}
@@ -1960,6 +1637,169 @@ cleanup:
 	}
 }
 #endif
+
+#pragma mark Song Fetcher Delegate 
+
+-(void)handleEvent:(JBSongFetcherEventType)event forFetcher:(JBSongFetcher *)fetcher withInfo:(NSDictionary *)info
+{
+    if(songFetcher != fetcher) return;
+    
+    
+    if(event == JBSongFetcherEvent_ERROR){
+        [self failWithErrorCode:AS_SONG_FETCHER_ERROR];
+    }
+    else if(event == JBSongFetcherEvent_EOF){
+        @synchronized(self)
+		{
+			if ([self isFinishing])
+			{
+				return;
+			}
+		}
+        
+        //
+		// If there is a partially filled buffer, pass it to the AudioQueue for
+		// processing
+		//
+		if (bytesFilled)
+		{
+			if (self.state == AS_WAITING_FOR_DATA)
+			{
+				//
+				// Force audio data smaller than one whole buffer to play.
+				//
+				self.state = AS_FLUSHING_EOF;
+			}
+			[self enqueueBuffer];
+		}
+        
+        @synchronized(self)
+		{
+			if (state == AS_WAITING_FOR_DATA)
+			{
+				[self failWithErrorCode:AS_AUDIO_DATA_NOT_FOUND];
+			}
+			
+			//
+			// We left the synchronized section to enqueue the buffer so we
+			// must check that we are !finished again before touching the
+			// audioQueue
+			//
+			else if (![self isFinishing])
+			{
+				if (audioQueue)
+				{
+					//
+					// Set the progress at the end of the stream
+					//
+					err = AudioQueueFlush(audioQueue);
+					if (err)
+					{
+						[self failWithErrorCode:AS_AUDIO_QUEUE_FLUSH_FAILED];
+						return;
+					}
+                    
+					self.state = AS_STOPPING;
+					stopReason = AS_STOPPING_EOF;
+					err = AudioQueueStop(audioQueue, false);
+					if (err)
+					{
+						[self failWithErrorCode:AS_AUDIO_QUEUE_FLUSH_FAILED];
+						return;
+					}
+				}
+				else
+				{
+					self.state = AS_STOPPED;
+					stopReason = AS_STOPPING_EOF;
+				}
+			}
+		}
+    }
+    else if(event == JBSongFetcherEvent_BYTES_AVAILABLE){
+        if(!fileLength){
+            fileLength = [songFetcher fileLength];
+        }
+        
+        if(!audioFileStream){
+			//
+			// Attempt to guess the file type from the URL. Reading the MIME type
+			// from the httpHeaders might be a better approach since lots of
+			// URL's don't have the right extension.
+			//
+			// If you have a fixed file-type, you may want to hardcode this.
+			//
+			AudioFileTypeID fileTypeHint =
+            [AudioStreamer hintForFileExtension:[[url path] pathExtension]];
+            
+			// create an audio file stream parser
+			err = AudioFileStreamOpen(self, ASPropertyListenerProc, ASPacketsProc, 
+                                      fileTypeHint, &audioFileStream);
+			if (err)
+			{
+				[self failWithErrorCode:AS_FILE_STREAM_OPEN_FAILED];
+				return;
+			}
+        }
+        
+        NSData* data = [info objectForKey:JBSongFetcherInfoDataKey];
+        CFIndex length;
+        if ([self isFinishing])
+        {
+            return;
+        }
+        
+        length = [data length];
+        
+        if(length == 0){
+            return;
+        }
+        
+        if(discontinuous){
+            err = AudioFileStreamParseBytes(audioFileStream, length, [data bytes], kAudioFileStreamParseFlag_Discontinuity);
+            
+            if(err){
+                [self failWithErrorCode:AS_FILE_STREAM_PARSE_BYTES_FAILED];
+				return;
+            }
+        }
+        else{
+            err = AudioFileStreamParseBytes(audioFileStream, length, [data bytes], 0);
+			if (err)
+			{
+				[self failWithErrorCode:AS_FILE_STREAM_PARSE_BYTES_FAILED];
+				return;
+			}
+        }
+    }
+}
+
+-(void)didStartFetchingFromByte:(unsigned long long)byte
+{
+    if(byte != seekByteOffset){
+        NSInteger calculatedBitRate = [self calculatedBitRate];
+        if(calculatedBitRate){
+            seekTime = (seekByteOffset - dataOffset) / (calculatedBitRate * (1.0/8));
+        }
+    }
+    self.state = AS_WAITING_FOR_DATA;
+}
+
+-(void)failedToFetchWithError:(NSError *)error
+{
+    [self failWithErrorCode:AS_SONG_FETCHER_ERROR];
+    
+}
+
+-(void)willStartFetching
+{
+    NSLog(@"Will start fetcing");
+}
+
+-(void)didPause
+{
+    NSLog(@"Paused");
+}
 
 @end
 
