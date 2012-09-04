@@ -60,6 +60,26 @@
 	}
 }
 
+-(void)createTimer
+{
+    if(!progressUpdateTimer){
+        progressUpdateTimer = [[NSTimer scheduledTimerWithTimeInterval:1
+                                                                target:self
+                                                              selector:@selector(updateProgress:)
+                                                              userInfo:nil
+                                                               repeats:YES] retain];
+    }
+}
+
+-(void)destroyTimer
+{
+    if(progressUpdateTimer){
+        [progressUpdateTimer invalidate];
+        [progressUpdateTimer release];
+        progressUpdateTimer = nil;
+    }
+}
+
 //
 // destroyStreamer
 //
@@ -73,8 +93,7 @@
 			removeObserver:self
 			name:ASStatusChangedNotification
 			object:streamer];
-		[progressUpdateTimer invalidate];
-		progressUpdateTimer = nil;
+        [self destroyTimer];
 		
 		[streamer stop];
 		[streamer release];
@@ -108,13 +127,7 @@
 	NSURL *url = [NSURL URLWithString:escapedValue];
 	streamer = [[AudioStreamer alloc] initWithURL:url];
 	
-	progressUpdateTimer =
-		[NSTimer
-			scheduledTimerWithTimeInterval:0.1
-			target:self
-			selector:@selector(updateProgress:)
-			userInfo:nil
-			repeats:YES];
+    [self createTimer];
 	[[NSNotificationCenter defaultCenter]
 		addObserver:self
 		selector:@selector(playbackStateChanged:)
@@ -132,7 +145,7 @@
 - (void)viewDidLoad
 {
 	[super viewDidLoad];
-	
+	downloadSourceField.text = @"https://api.soundcloud.com/tracks/39476362/stream?client_id=4569d4b59f76c5978bc57fd0aa029bbc";
 	MPVolumeView *volumeView = [[[MPVolumeView alloc] initWithFrame:volumeSlider.bounds] autorelease];
 	[volumeSlider addSubview:volumeView];
 	[volumeView sizeToFit];
@@ -226,7 +239,11 @@
 {
 	if (streamer.duration)
 	{
+        [self destroyTimer];
+        
 		double newSeekTime = (aSlider.value / 100.0) * streamer.duration;
+        aSlider.value = 100*(newSeekTime/streamer.duration);
+        
 		[streamer seekToTime:newSeekTime];
 	}
 }
@@ -242,10 +259,12 @@
 	if ([streamer isWaiting])
 	{
 		[self setButtonImageNamed:@"loadingbutton.png"];
+        
 	}
 	else if ([streamer isPlaying])
 	{
 		[self setButtonImageNamed:@"stopbutton.png"];
+        [self createTimer];
 	}
 	else if ([streamer isIdle])
 	{

@@ -708,7 +708,6 @@ cleanup:
 		[songFetcher release];
         songFetcher = nil;
         
-        
 		//
 		// Close the audio file stream,
 		//
@@ -1788,7 +1787,6 @@ cleanup:
 -(void)failedToFetchWithError:(NSError *)error
 {
     [self failWithErrorCode:AS_SONG_FETCHER_ERROR];
-    
 }
 
 -(void)willStartFetching

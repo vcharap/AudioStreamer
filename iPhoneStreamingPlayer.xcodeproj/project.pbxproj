@@ -85,20 +85,20 @@
 		080E96DDFE201D6D7F000001 /* Classes */ = {
 			isa = PBXGroup;
 			children = (
-				56003EE215F4929B0012B96C /* JBDownload.h */,
-				56003EE315F4929B0012B96C /* JBDownload.m */,
-				56003EE415F4929B0012B96C /* JBSongFetcher.h */,
-				56003EE515F4929B0012B96C /* JBSongFetcher.m */,
-				56003EE615F4929B0012B96C /* NSArray+NSArray_FirstObject.h */,
-				56003EE715F4929B0012B96C /* NSArray+NSArray_FirstObject.m */,
-				56003EE815F4929C0012B96C /* NSString+NSString_MD5.h */,
-				56003EE915F4929C0012B96C /* NSString+NSString_MD5.m */,
 				C9C2D8790EB6E09C00A3D071 /* AudioStreamer.h */,
 				C9C2D8780EB6E09C00A3D071 /* AudioStreamer.m */,
 				1D3623240D0F684500981E51 /* iPhoneStreamingPlayerAppDelegate.h */,
 				1D3623250D0F684500981E51 /* iPhoneStreamingPlayerAppDelegate.m */,
 				28D7ACF60DDB3853001CB0EB /* iPhoneStreamingPlayerViewController.h */,
 				28D7ACF70DDB3853001CB0EB /* iPhoneStreamingPlayerViewController.m */,
+				56003EE415F4929B0012B96C /* JBSongFetcher.h */,
+				56003EE515F4929B0012B96C /* JBSongFetcher.m */,
+				56003EE215F4929B0012B96C /* JBDownload.h */,
+				56003EE315F4929B0012B96C /* JBDownload.m */,
+				56003EE615F4929B0012B96C /* NSArray+NSArray_FirstObject.h */,
+				56003EE715F4929B0012B96C /* NSArray+NSArray_FirstObject.m */,
+				56003EE815F4929C0012B96C /* NSString+NSString_MD5.h */,
+				56003EE915F4929C0012B96C /* NSString+NSString_MD5.m */,
 			);
 			path = Classes;
 			sourceTree = "<group>";
